@@ -1,6 +1,7 @@
 package qla.modules.actions;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.List;
 
 import qla.modules.actions.exeption.ActionException;
@@ -27,7 +28,7 @@ public class LoadExceptionsAction extends AbstractAction<LoadExceptionsActionRQ>
 		
 		try {
 			LogAnalisationInfo info = LogAnalyseInfoSaver.restore(ActionHelper.getPathToParsedLogFile(parsedFile));
-			List<LogExeptionModel> exceptions = info.getExeptionModels();
+			Collection<LogExeptionModel> exceptions = info.getExeptionModels();
 			if(exceptions == null || exceptions.isEmpty()) {
 				rs.setSuccess("No exceptins found.");
 			} else {

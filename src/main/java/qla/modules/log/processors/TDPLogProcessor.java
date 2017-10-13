@@ -5,8 +5,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -16,9 +14,7 @@ import qla.modules.log.LogConfiguration;
 import qla.modules.log.LogFile;
 import qla.modules.log.Logline;
 import qla.modules.loganalyser.LogAnalisationInfo;
-import qla.modules.loganalyser.models.LogExeptionModel;
 import qla.modules.loganalyser.models.LogModel;
-import qla.modules.loganalyser.models.SignalModel;
 
 public class TDPLogProcessor implements ILogProcessor {
 	private LogConfiguration logConfiguration;
@@ -30,42 +26,17 @@ public class TDPLogProcessor implements ILogProcessor {
 		long startTimeMillis = System.currentTimeMillis();
 		LogFile logFile = new LogFile(pathToLogfile, logConfiguration);
 		startProcessing(logFile);
-		Map<Integer, LogModel> dataForAnalisationInfo =
-				getProcessedDataForAnalysationInfo(logFile, lineProcessors, this::progressOfProcessing);
-		LogAnalisationInfo analisationInfo = getAnalisationInfo(dataForAnalisationInfo);
-		closeResources(logFile, dataForAnalisationInfo);
+		LogAnalisationInfo analisationInfo = getAnalisationInfo(logFile, lineProcessors, this::progressOfProcessing);
+		closeResources(logFile);
 		endOfProcessing(logFile);
 		printStatistics(startTimeMillis, logFile,analisationInfo);
 		return analisationInfo;
 	}
 
-	private void closeResources(LogFile logFile, Map<Integer, LogModel> dataForAnalisationInfo)
+	private void closeResources(LogFile logFile)
 	{
 		logFile.close();
 		System.gc();
-		dataForAnalisationInfo.clear();
-	}
-
-	private static LogAnalisationInfo getAnalisationInfo(Map<Integer, LogModel> dataForAnalisationInfo)
-	{
-		LogAnalisationInfo analisationInfo = new LogAnalisationInfo();
-		TreeMap<Integer, LogModel> treeMap = new TreeMap<>();
-		treeMap.putAll(dataForAnalisationInfo);
-		int signalModelId = 0;
-		int exceptionModelId = 0;
-		for (Integer index : treeMap.keySet())
-		{
-			LogModel logModel = treeMap.get(index);
-			if (logModel.getLogModelType()== LogModel.LogModelType.EXCEPTION_LOG_MODEL) {
-				analisationInfo.addLogExeptionModel((LogExeptionModel) logModel);
-				logModel.setId(signalModelId++);
-			} else if (logModel.getLogModelType()== LogModel.LogModelType.SIGNAL_LOG_MODEL)
-			{
-				analisationInfo.addSignalModel((SignalModel) logModel);
-				logModel.setId(exceptionModelId++);
-			}
-		}
-		return analisationInfo;
 	}
 
 	private static void printStatistics(long startTimeMillis, LogFile logFile, LogAnalisationInfo analisationInfo)
@@ -73,36 +44,40 @@ public class TDPLogProcessor implements ILogProcessor {
 		double elapsedTime = (System.currentTimeMillis()-startTimeMillis)/1000.;
 		double fileSizeMbs = logFile.getFileSize() / 1000000.;
 		double mbsPerSecond = fileSizeMbs/elapsedTime;
+		int completedLines = analisationInfo.getSignalModels().size();
+		int coresUsed = ConcurrencyHelper.getNumberOfCPUCores();
+		long maxMemoryMbs  = Runtime.getRuntime().maxMemory()/(1024*1024);
+		long freeMemoryMbs = Runtime.getRuntime().freeMemory()/(1024*1024);
 		System.err.println("File size: " + fileSizeMbs +
 				" mb | Time elapsed " + elapsedTime +
 				" | Performance: " + mbsPerSecond+" mb/s" +
-				" | Completed lines: " + analisationInfo.getSignalModels().size()+
-				" | Cores used: "+ConcurrencyHelper.getNumberOfCPUCores());
+				" | Completed lines: " + completedLines +
+				" | Cores used: "+ coresUsed +
+				" | Free memory: "+ freeMemoryMbs +"/"+maxMemoryMbs);
 	}
 
-	private static Map<Integer, LogModel> getProcessedDataForAnalysationInfo(final LogFile logLinesFile,
+	private static LogAnalisationInfo getAnalisationInfo(final LogFile logLinesFile,
 																			 List<ILoglineProcessor> lineProcessors,
 																			 Consumer<LogFile> progressBarChangesConsumer)
 	{
-		final Map<Integer,LogModel> dataForAnalisationInfo = new ConcurrentHashMap<>();
+		LogAnalisationInfo logAnalisationInfo = new LogAnalisationInfo();
+
 		int nThreads = ConcurrencyHelper.getNumberOfCPUCores();
 		ExecutorService service = Executors.newFixedThreadPool(nThreads);
-		for (Logline logLine : logLinesFile)
-		{
-			service.submit(() ->
-			{
-				//separate thread
+		for (Logline logLine : logLinesFile) {
+			Runnable threadTask = () ->	{
 				for (ILoglineProcessor iLoglineProcessor : lineProcessors)
 				{
 					if (iLoglineProcessor.isNeedProcessing(logLine))
 					{
 						LogModel logModel = iLoglineProcessor.proccess(logLine, logLinesFile);
-						dataForAnalisationInfo.put(logModel.getLine(), logModel);
+						logAnalisationInfo.addLogModel(logModel);
 						break;
 					}
 				}
-			});
-			progressBarChangesConsumer.accept(logLinesFile);
+				progressBarChangesConsumer.accept(logLinesFile);
+			};
+			service.submit(threadTask);
 		}
 
 		service.shutdown();
@@ -111,7 +86,7 @@ public class TDPLogProcessor implements ILogProcessor {
 				break;
 			}
 		}
-		return dataForAnalisationInfo;
+		return logAnalisationInfo;
 	}
 
 	private void endOfProcessing(LogFile logFile) {

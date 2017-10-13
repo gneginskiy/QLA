@@ -65,7 +65,7 @@ public class LogModel implements Serializable{
 	}
 
 
-	public static enum LogModelType
+	public enum LogModelType
 	{
 		SIGNAL_LOG_MODEL, EXCEPTION_LOG_MODEL
 	}
