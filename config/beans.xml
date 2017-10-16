@@ -205,13 +205,14 @@
 		<property name="lineProcessors">
 			<list>
 				<ref bean="tdpLoglineProcessor"/>
-				<ref bean="sabreLoglineProcessor"/>
 				<ref bean="amadeusLoglineProcessor"/>
-				<ref bean="exceptionLoglineProcessor"/>
-				<ref bean="aceLoglineProcessor"/>
-				<ref bean="viatorProcessor"/>
-				<ref bean="astralProcessor"/>
-				<ref bean="CUILoglineProcessor"/>
+				<ref bean="exceptionLoglineProcessor"/>		
+				<!-- Disabled by default in order to reduce processing time. Feel free to enable these processor in case you need it --> 
+				<!--<ref bean="sabreLoglineProcessor"/>-->
+				<!--<ref bean="aceLoglineProcessor"/>-->
+				<!--<ref bean="viatorProcessor"/>-->
+				<!--<ref bean="astralProcessor"/>-->
+				<!--<ref bean="CUILoglineProcessor"/>-->
 			</list>
 		</property>
 	</bean>
